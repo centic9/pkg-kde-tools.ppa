@@ -1,0 +1,76 @@
+#!/usr/bin/perl
+
+# Copyright (C) 2010 Modestas Vainius <modax@debian.org>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>
+
+use strict;
+use warnings;
+
+use Dpkg;
+use Debian::PkgKde qw(find_exe_in_path);
+
+my $old_symbolfile_parse;
+
+sub new_symbolfile_parse {
+    # Use Debian::PkgKde::SymbolsHelper::Symbol as base symbol
+    my ($self, $fh, $file, $seen, $obj_ref, $base_symbol) = @_;
+    unless (defined $base_symbol) {
+	$base_symbol = 'Debian::PkgKde::SymbolsHelper::Symbol';
+    }
+    return &$old_symbolfile_parse($self, $fh, $file, $seen, $obj_ref,
+	$base_symbol);
+}
+
+sub check_dpkg_version {
+    my @need = @_;
+    my @ver = split(/[.]/, $Dpkg::version);
+    my $ok = 0;
+    for (my $i = 0; ! $ok && $i < @need && $i < @ver; $i++) {
+	if ($ver[$i] > $need[$i]) {
+	    $ok = 1;
+	} elsif ($ver[$i] == $need[$i]) {
+	    if ($i == $#need) {
+		$ok = 1;
+	    }
+	} else {
+	    # Less
+	    last;
+	}
+    }
+    return $ok;
+}
+
+my $exe = find_exe_in_path("dpkg-gensymbols", $0);
+unless ($exe) {
+    print STDERR "pkgkde-gensymbols: dpkg-gensymbols could not be found in PATH", "\n";
+    exit 1;
+}
+
+eval "use Dpkg::Shlibs::SymbolFile";
+eval "use Debian::PkgKde::SymbolsHelper::Symbol";
+
+# Replace Dpkg::Shlibs::SymbolFile::load with a custom version
+# which uses Debian::PkgKde::SymbolsHelper::Symbol rather than
+# Dpkg::Shlibs::Symbol
+$old_symbolfile_parse = *Dpkg::Shlibs::SymbolFile::parse;
+*Dpkg::Shlibs::SymbolFile::parse = *new_symbolfile_parse;
+
+# Finally, run stock dpkg-gensymbols
+unless (do $exe) {
+    print STDERR $@;
+    exit 1;
+}
+
+# vim: noexpandtab ts=8 sw=4

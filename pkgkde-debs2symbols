@@ -1,0 +1,157 @@
+#!/bin/sh
+
+# Copyright (C) 2010 Modestas Vainius <modax@debian.org>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>
+
+set -e
+
+include_common() {
+    local _dirname
+    _dirname="`dirname "$0"`"
+    if [ -n "$_dirname" ] && [ -f "$_dirname/datalib/shell_common" ]; then
+        . "$_dirname/datalib/shell_common"
+    else
+        . /usr/share/pkg-kde-tools/lib/shell_common
+    fi
+}
+
+usage() {
+    echo "$PROGNAME: usage:" "$0" "[ -i symbol_file ]" "[ -d debdir ]" "[ -s symboldir ]" package version "[ download_url ]" >&2
+}
+
+
+download() {
+    local debdir
+    debdir="$1"
+    # Download debs
+    info "Downloading packages from $URL ..."
+    wget -e robots=off --timestamping --no-directories --directory-prefix="$debdir" \
+         --recursive --level=1 --no-parent --accept "$DEB_WILDCARD" "$URL"
+}
+
+extract_deb() {
+    local deb tmpdir outdir
+    local arch package version outfile
+
+    deb="$1"
+    tmpdir="$2"
+    outdir="$3"
+
+    info2 "Extracting `basename $deb` ..."
+    dpkg-deb -e "$deb" "$tmpdir/DEBIAN"
+    dpkg-deb -x "$deb" "$tmpdir"
+}
+
+dump_symbols() {
+    local tmpdir outdir reffile
+    local arch package version outfile outpatch
+
+    tmpdir="$1"
+    outdir="$2"
+    reffile="$3"
+
+    # Collection information about package
+    package=$(sed -n '/^Package:/ {s/[^:]\+:[[:space:]]*\(.\+\)/\1/; p; q}' "$tmpdir/DEBIAN/control")
+    version=$(sed -n '/^Version:/ {s/[^:]\+:[[:space:]]*\(.\+\)/\1/; p; q}' "$tmpdir/DEBIAN/control")
+    arch=$(sed -n '/^Architecture:/ {s/[^:]\+:[[:space:]]*\(.\+\)/\1/; p; q}' "$tmpdir/DEBIAN/control")
+
+    if [ "$arch" = "all" ]; then
+        error "it does not make sense to process arch:all package ($deb)"
+    fi
+
+    if [ -n "$reffile" ]; then
+	outfile="${package}_${arch}"
+	patchfile="$outdir/$outfile.patch"
+	info2 "[$arch] Dumping patch & symbol file as $outfile/$outfile.{patch,symbols} ..."
+	pkgkde-gensymbols "-p$package" "-P$tmpdir" "-v$version" "-a$arch" \
+	    -c1 "-I$reffile" -O"$outdir/$outfile.symbols" > "$patchfile" || true
+	test -s "$patchfile" || rm -f "$patchfile"
+    else
+	outfile="${package}_${arch}"
+	info2 "[$arch] Dumping symbol file as $outfile ..."
+	pkgkde-gensymbols "-p$package" "-P$tmpdir" "-v$version" "-a$arch" \
+	    -c0 -q -I/dev/null "-O$outdir/$outfile"
+    fi
+}
+
+include_common
+
+# Process options
+REFFILE=""
+DEBDIR=""
+SYMBOLDIR=""
+while getopts "i:d:s:" name; do
+    case "$name" in
+	i)  REFFILE="$OPTARG" ;;
+	d)  DEBDIR="$OPTARG" ;;
+	s)  SYMBOLDIR="$OPTARG" ;;
+	\?)  usage; exit 2 ;;
+    esac
+done
+
+shift `expr $OPTIND - 1`
+
+PACKAGE="$1"
+VERSION="$2"
+URL="$3"
+
+DEB_WILDCARD="${PACKAGE}_${VERSION}_*.deb"
+
+if [ -z "$PACKAGE" ] || [ -z "$VERSION" ]; then
+    usage
+    exit 2
+fi
+
+# Create directories to store downloaded debs and symbol files
+debdir="${DEBDIR:-${PACKAGE}_${VERSION}_debs}"
+symboldir="${SYMBOLDIR:-${PACKAGE}_${VERSION}_symbols}"
+
+info "Selected directory for packages (*.deb):" "$debdir/"
+if [ -n "$URL" ]; then
+    if [ "${URL#http://}" != "$URL" ] || [ "${URL#ftp://}" != "$URL" ]; then
+        if [ ! -d "$debdir" ]; then
+            mkdir "$debdir"
+        fi
+        download "$debdir"
+    else
+        error "only http:// and ftp:// download URLs are supported"
+    fi
+fi
+
+# Extract and process debs
+c=0
+if [ -d "$debdir" ]; then
+    tmpdir=`mktemp -d --tmpdir=. tmpdeb.XXXXXX`
+    rmdir "$tmpdir"
+    if [ ! -d "$symboldir" ]; then
+	mkdir "$symboldir"
+    fi
+
+    info "Selected temporary directory:" "$tmpdir/"
+    info "Selected directory for symbol files:" "$symboldir/"
+    for deb in `ls -1 "$debdir"/$DEB_WILDCARD 2>/dev/null | sort`; do
+        mkdir "$tmpdir"
+        extract_deb "$deb" "$tmpdir" "$symboldir"
+        dump_symbols "$tmpdir" "$symboldir" "$REFFILE"
+        rm -rf "$tmpdir"
+        c=$(($c+1))
+    done
+fi
+
+if [ $c -eq 0 ]; then
+    error "no '$DEB_WILDCARD' binary packages found in $debdir/"
+fi
+
+info "$c arch specific symbol files dumped successfully to $symboldir/"

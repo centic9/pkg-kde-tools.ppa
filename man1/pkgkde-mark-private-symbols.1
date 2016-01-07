@@ -1,0 +1,23 @@
+.TH PKGKDE\-MARK\-PRIVATE\-SYMBOLS 1 "2015-05-13" "0.15.17" "Debian Qt/KDE tool to mark private symbols in symbols files"
+.SH NAME
+.B pkgkde\-mark\-private\-symbols
+\- a helper tool for Debian pkg-kde symbols handling.
+.SH SYNOPSIS
+.B pkgkde\-mark\-private\-symbols
+[\fBpath/to/headers/dir\fR]
+.B pkgkde\-mark\-private\-symbols
+is a helper tool to mark private symbols inside symbols files. It's only
+parameter is the path to where the headers \fBshipped with the packages\fR
+are installed.
+
+.B pkgkde\-mark\-private\-symbols
+will by default write the differences as patches to stdout. If the environment
+variable \fBWRITERESULTS\fR is set it will overwrite the original symbols files.
+
+.SH LICENSE
+.P
+This program is free software distributed under the terms of the Expat license.
+.SH AUTHORS
+Sune Vuorela <sune@debian.org>
+Lisandro Damián Nicanor Pérez Meyer <lisandro@debian.org>
+Dmitry Shachnev <mitya57@debian.org>

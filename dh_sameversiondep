@@ -1,0 +1,506 @@
+#!/usr/bin/perl -w
+
+# Copyright (C) 2010 Modestas Vainius <modax@debian.org>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>
+
+=head1 NAME
+
+dh_sameversiondep - generate versioned dependency based on the versioned
+dependencies of the reference package.
+
+=head1 SYNOPSIS
+
+B<dh_sameversiondep> [S<I<debhelper options>>]
+
+=head1 DESCRIPTION
+
+B<dh_sameversiondep> is a helper tool which is able to generate a dependency
+that is versioned the same way as a dependency (coming from the same source) of
+another reference package.  B<dh_sameversiondep> scans debian/control for the
+specially formatted substvar (see L</sameVersionDep substvar SPECIFICATION>
+section below), determines its value and writes it to
+F<debian/package.substvars> file.
+
+The most common use case for B<dh_sameversiondep> tool is to keep your
+I<liba-dev> package dependency on the external I<libb-dev> package as tight as
+your I<liba> package depends on the respective external I<libb> package (see
+L</EXAMPLE> section for more information about this use case).
+
+B<dh_sameversiondep> works as follows:
+
+=over 4
+
+=item *
+
+Searches for the B<sameVersionDep> substvar in the Depends, Recommends,
+Suggests, Enhances and Pre-Depends fields of the requested packages. When one
+is found, it is parsed and the I<dependency package> name, I<reference package>
+name and I<dependency type> (either Depends or Recommends etc.) are determined.
+
+=item *
+
+All dependencies of the requested I<type> are collected for the I<dependency
+package> based on the I<dpkg-query --status> output. If a multi-arch aware dpkg
+is detected, this query is architecture-qualified as needed.
+
+=item *
+
+All dependencies of the requested I<type> are collected for the I<reference
+package> either from F<debian/control> (substvars are expanded) or from
+I<dpkg-query --status> output if the package was not found in
+F<debian/control>.
+
+=item *
+
+Both collections are intersected leaving only common packages in both
+collections.
+
+=item *
+
+Common package list is filtered by leaving only those which come from the same
+source as I<dependency package>.
+
+=item *
+
+Whatever packages are left (most likely only one), their names are replaced
+with I<dependency package> name preserving all versioning information. This
+result is written to F<debian/package.substvars> file as a value of the
+B<sameVersionDep> substvar being processed.
+
+=back
+
+B<dh_sameversiondep> is very strict about errors. If either I<dependency
+package> or the I<reference package> cannot be found or the resulting
+dependency set is empty, it will fail with an error.
+
+B<dh_sameversiondep> MUST be run before L<dh_gencontrol>. However, it is
+recommended to run B<dh_sameversiondep> after L<dh_shlibdeps>.
+
+=head1 sameVersionDep substvar SPECIFICATION
+
+B<sameVersionDep> substvar can appear in either Depends, Recommends, Suggests,
+Enhances or Pre-Depends field of any binary package. The field, which the
+substvar appears in, becomes the default I<dependency type> for that substvar.
+B<sameVersionDep> should be formatted as follows (everything is case sensitive):
+
+S<< ${B<sameVersionDep>:I<dependency>[[:I<reference>]-I<dependency type>]} >>
+
+=over 4
+
+=item I<dependency> (mandatory)
+
+The name of the package which you want to add as a dependency.
+
+=item I<reference> (optional)
+
+The name of the package which dependencies are to be intersected with the
+dependencies of the I<dependency> package. Defaults to the first package in
+debian/control if ommited.
+
+=item I<dependency type> (optional)
+
+Can be either Depends, Recommends, Suggests, Enhances or Pre-Depends. Defaults
+to the name of the field which the substvar was found in. Specifies which type
+of dependencies to consider when analyzing I<dependency> package and
+I<reference> package.
+
+=back
+
+=head1 EXAMPLE
+
+Assume we have the following in F<debian/control>:
+
+    Package: liba
+    Depends: libc (>= 0.1), depa, depb, depc
+
+    Package: libb
+    Depends: libd (>= 0.2), depd, depe, depf
+
+    Package: libab-dev
+    Depends: ${sameVersionDep:libc-dev}, ${sameVersionDep:libd-dev:libb}
+
+Assumming that libc and libc-dev (both from the same source), as well as libd
+and libd-dev (both from the same source) are installed, the value of
+C<sameVersionDep:libc-dev> will be I<< libc-dev (>= 0.1) >> and the value of
+C<sameVersionDep:libd-dev:libb> will be I<< libd-dev (>= 0.2) >>.
+
+C<sameVersionDep:libc-dev> could also be written as
+C<sameVersionDep:libc-dev:liba-Depends> and C<sameVersionDep:libd-dev:libb> as
+C<sameVersionDep:libd-dev:libb-Depends> but it is not necessary because
+defaults are sufficient.
+
+=head1 SEE ALSO
+
+L<debhelper(7)>
+
+=head1 AUTHOR
+
+Modestas Vainius <modax@debian.org>
+
+=cut
+
+use strict;
+use warnings;
+
+use Dpkg::Control::Info;
+use Dpkg::Substvars;
+use Dpkg::ErrorHandling ();
+use File::Copy;
+use POSIX ":sys_wait_h";
+
+use Debian::Debhelper::Dh_Lib;
+
+my $namespace = "sameVersionDep";
+my @fields = qw(Depends Recommends Suggests Enhances Pre-Depends);
+my $re_fields = join("|", @fields);
+my $re_pkgname = qr/[a-z0-9][a-z0-9+.-]*/;
+my $re_oursubstvar = qr/\$\{($namespace:(.*?))\}/;
+my $re_splitsubstvar = qr/^($re_pkgname)(?::($re_pkgname))?(?:-($re_fields))?$/;
+
+# Global substvars file
+my $g_substvars = new Dpkg::Substvars;
+$g_substvars->load("debian/substvars") if (-r "debian/substvars");
+
+my $MULTIARCH_ARCH;
+
+sub extract_package_names {
+    my $val = shift;
+    $val =~ s/\([^)]+\)//g;
+    $val =~ s/^\s+//;
+    $val =~ s/\s+$//;
+    return split(/\s*,\s*/, $val);
+}
+
+sub extract_deps {
+    my ($val, $deppkg) = @_;
+
+    # Extract dependency fields we need
+    my @matched_deps;
+    for my $dep (split(/\s*,\s*/, $val)) {
+        if ($dep =~ /^\Q$deppkg\E(?:$|[\W])/) {
+            push @matched_deps, $dep;
+        }
+    }
+    return @matched_deps;
+}
+
+sub Shlibsvars::new {
+    my ($cls, $package, $control, $substvars_file) = @_;
+    my $self = bless ( {
+        "package" => $package,
+        "control" => $control,
+        "file" => $substvars_file,
+        }, $cls);
+    $self->{substvars} = new Dpkg::Substvars;
+    if (-r $self->{file}) {
+        $self->{substvars}->load($self->{file});
+    }
+    return $self;
+}
+
+sub Shlibsvars::get_fieldval {
+    my ($self, $field) = @_;
+
+    my $pkg = $self->{control}->get_pkg_by_name($self->{package});
+    return undef if (!defined $pkg || !exists $pkg->{$field});
+
+    # Turn of warnings for substvars runs
+    Dpkg::ErrorHandling::report_options(quiet_warnings => 1);
+
+    my $val = $pkg->{$field};
+    $val = $self->{substvars}->substvars($val);
+    $val = $g_substvars->substvars($val);
+
+    Dpkg::ErrorHandling::report_options(quiet_warnings => 0);
+    return $val;
+}
+
+sub Shlibsvars::extract_deps {
+    my ($self, $field, $deppkg) = @_;
+
+    my $val = $self->get_fieldval($field);
+    return undef() unless defined $val;
+    return extract_deps($val, $deppkg);
+}
+
+sub Shlibsvars::get_dep_package_names {
+    my ($self, $field) = @_;
+
+    my $val = $self->get_fieldval($field);
+    return undef() unless defined $val;
+    return extract_package_names($val);
+}
+
+sub supports_multiarch {
+    if (!defined $MULTIARCH_ARCH) {
+        my $multiarch_assert = system('dpkg', '--assert-multi-arch');
+        if ($multiarch_assert == 0) {
+            $MULTIARCH_ARCH = dpkg_architecture_value('DEB_HOST_ARCH');
+        } else {
+            $MULTIARCH_ARCH = ""; # empty indicates no multiarch support
+        }
+    }
+    return $MULTIARCH_ARCH ne "";
+}
+
+sub arch_qualify {
+    if (supports_multiarch()) {
+        return map { "$_:$MULTIARCH_ARCH" } @_;
+    } else {
+        return @_;
+    }
+}
+
+sub execute_dpkg_status {
+    my $binpkgs = shift;
+    my $fields = shift;
+    $fields = [ "Source", "Version" ] unless defined $fields;
+    my $status = shift;
+
+    my $regexp_fields = join("|", @$fields);
+
+    my $pid = open(DPKG, "-|");
+    error("cannot fork for dpkg-query --status") unless defined($pid);
+    if (!$pid) {
+        # Child process running dpkg-query --status and discarding errors
+        close STDERR;
+        open STDERR, ">", "/dev/null";
+        $ENV{LC_ALL} = "C";
+        exec("dpkg-query", "--status", "--", @$binpkgs) or error("cannot exec dpkg-query");
+    }
+    my $curpkg;
+    while (defined($_ = <DPKG>)) {
+        if (m/^Package:\s*(.*)$/) {
+            $curpkg = $1;
+            $status->{$curpkg} = {};
+        } elsif (defined($curpkg)) {
+            if (m/^($regexp_fields):\s*(.*)$/) {
+                my $field = $1;
+                error("dublicate field $field for the $curpkg package in the dpkg status file")
+                    if (exists $status->{$curpkg}{$field});
+                $status->{$curpkg}{$field} = $2;
+            }
+        }
+    }
+    close(DPKG);
+
+    my $exit_code = $?;
+    if (WIFEXITED($exit_code)) {
+        return WEXITSTATUS($exit_code);
+    } else {
+        error("failed to terminate dpkg --status process PID $pid");
+    }
+}
+
+sub get_package_dpkg_status {
+    my $binpkgs = shift;
+    my $fields = shift;
+    my %status;
+
+    my $exit_code = execute_dpkg_status($binpkgs, $fields, \%status);
+    if ($exit_code == 2 && supports_multiarch()) {
+        # Most likely dpkg-query --status failed due to some of package names
+        # being ambiguous on this system. So just requery them using
+        # arch-qualified syntax.
+        # NOTE: we have to query twice since arch-qualified syntax won't find
+        # arch:all packages.
+        my @ambiguous_pkgs = arch_qualify(grep { ! exists $status{$_} } @$binpkgs);
+        if (@ambiguous_pkgs) {
+            execute_dpkg_status(\@ambiguous_pkgs, $fields, \%status);
+        }
+    }
+    return \%status;
+}
+
+sub write_substvar($$$$) {
+    my ($pkgname, $varname, $value, $substvars) = @_;
+    my @contents;
+    my $varset = 0;
+
+    my $file = (-r $substvars) ? $substvars : "debian/substvars";
+    if (-r $file) {
+        open(FILE, "<$file") or die "Unable to open substvars file '$file' for reading\n";
+        while (<FILE>) {
+            if (!$varset && /^\s*\Q$varname=\E/) {
+                push @contents, "$varname=$value\n";
+                $varset = 1;
+            } else {
+                push @contents, $_;
+            }
+        }
+        close(FILE);
+    } else {
+        # Fallback to default
+        $file = $substvars;
+    }
+
+    open(FILE, ">$file.tmp") or die "Unable to open substvars file '$file.tmp' for writing\n";
+    for (@contents) {
+        print FILE $_;
+    }
+    if (!$varset) {
+        print FILE "$varname=$value", "\n";
+    }
+    close(FILE);
+
+    File::Copy::move("$file.tmp", "$file");
+}
+
+init();
+
+my $control = Dpkg::Control::Info->new();
+my %shlibsvars;
+
+foreach my $package (@{$dh{DOPACKAGES}}) {
+    my $pkg_substvars = sprintf("debian/%ssubstvars", pkgext($package));
+    my $pkg = $control->get_pkg_by_name($package);
+
+    for my $fieldname (@fields) {
+        if (exists $pkg->{$fieldname}) {
+            my $fieldval = $pkg->{$fieldname};
+            my $pkgname = $pkg->{Package};
+
+            while ($fieldval =~ m/\G.*?$re_oursubstvar/gs) {
+                my $varname = $1;
+                my $varparams = $2;
+                if ($varparams =~ m/$re_splitsubstvar/) {
+                    my $dep2add = $1;
+
+                    # Scan package default to MAINPACKAGE.
+                    my $refpkg = $2;
+                    $refpkg = $dh{MAINPACKAGE} unless defined $refpkg;
+
+                    my $deptype = $3;
+                    $deptype = $fieldname unless defined $deptype;
+
+                    # Initialize some dep2add and refpkg data.
+                    # refpkg might also come from external source. Use dpkg-query
+                    # to get its dpkg status then.
+                    my $refpkg_status;
+                    my $dep2add_status;
+                    my $vars;
+                    if ($control->get_pkg_by_name($refpkg)) {
+                        if (!exists $shlibsvars{$refpkg}) {
+                            my $refpkg_substvars = sprintf("debian/%ssubstvars", pkgext($refpkg));
+                            $shlibsvars{$refpkg} = new Shlibsvars($refpkg, $control, $refpkg_substvars);
+                        }
+                        $vars = $shlibsvars{$refpkg};
+
+                        $dep2add_status = get_package_dpkg_status( [ $dep2add ], [ "Source", "Version", $deptype ] );
+                    } else {
+                        my $status = get_package_dpkg_status( [ $refpkg, $dep2add ], [ "Source", "Version", $deptype ] );
+                        error("cannot continue because the reference package $refpkg could not be found in debian/control or dpkg status")
+                            unless (exists $status->{$refpkg});
+                        error("cannot continue because package $refpkg has no $deptype field to scan")
+                            unless (exists $status->{$refpkg}{$deptype});
+                        $refpkg_status = $status->{$refpkg};
+
+                        $dep2add_status = $status; # see code below
+                    }
+
+                    ##### Process and verify dep2add status #####
+                    error("cannot continue because package $dep2add could not be found in dpkg status")
+                        unless (exists $dep2add_status->{$dep2add});
+                    $dep2add_status = $dep2add_status->{$dep2add};
+
+                    # If the source is named the same as the binary package, there
+                    # will be no Source field. Use package name as Source then.
+                    $dep2add_status->{Source} = $dep2add
+                        unless ($dep2add_status->{Source});
+
+                    # Check validility of dep2add status
+                    error("could not retreive source package name for $dep2add package. Is it installed?")
+                        unless exists $dep2add_status->{Source} && exists $dep2add_status->{Version};
+                    error("package $dep2add has no $deptype field. This configuration is unsupported. ")
+                        unless exists $dep2add_status->{$deptype};
+                    my @dep2add_deps = extract_package_names($dep2add_status->{$deptype});
+
+                    # Get deptype packages of refpkg
+                    my @refpkg_deps;
+                    if ($vars) {
+                        @refpkg_deps = $vars->get_dep_package_names($deptype);
+                    } else {
+                        @refpkg_deps = extract_package_names($refpkg_status->{$deptype});
+                    }
+                    error("cannot continue because package $refpkg has no $deptype field to scan")
+                        unless (@refpkg_deps);
+
+                    # Intersect both _deps arrays to find common dependencies
+                    my @commondeps;
+                    {
+                        my %_map;
+                        map { $_map{$_} = 1; } @refpkg_deps;
+                        map { push @commondeps, $_ if exists $_map{$_} } @dep2add_deps;
+                    }
+
+                    # Get status information about common packages. They need to come from the
+                    # same source package as dep2add package and their versions should match
+                    my $depstatus = get_package_dpkg_status(\@commondeps, [ "Source", "Version" ]);
+
+                    # Check if all packages were found
+                    for my $dep (@commondeps) {
+                        error("package $dep was not found in the dpkg status. Internal error")
+                            unless exists $depstatus->{$dep};
+                    }
+
+                    # Filter commondeps
+                    @commondeps = ();
+                    while (my ($pkg, $status) = each(%$depstatus)) {
+                        # If the source is named the same as the binary package, there
+                        # will be no Source field. Use package name as Source then.
+                        $status->{Source} = $pkg unless ($status->{Source});
+
+                        push @commondeps, $pkg
+                            if (exists $status->{Source} && exists $status->{Version} &&
+                                ($status->{Source} eq $dep2add_status->{Source}) && 
+                                ($status->{Version} eq $dep2add_status->{Version}));
+                    }
+
+                    # Ideally we should have got the list down to one. if not, combine
+                    # version relationships
+                    my @fulldeps;
+                    if (!@commondeps) {
+                        error("$0: no same version dependencies for '$varname' found (at $fieldname of the $package package)");
+                    } else {
+                        my $refpkg_deptypeval = ($vars) ? $vars->get_fieldval($deptype) :
+                                                           $refpkg_status->{$deptype};
+                        for my $deppkg (@commondeps) {
+                            my @full_dep_spec = extract_deps($refpkg_deptypeval, $deppkg);
+                            map s/\b\Q$deppkg\E\b/$dep2add/g, @full_dep_spec;
+                            push @fulldeps, @full_dep_spec;
+                        }
+
+                        # Drop dupes
+                        @fulldeps = sort @fulldeps;
+                        my @uniqdeps;
+                        my $_prevdep;
+                        for my $dep (@fulldeps) {
+                            my $tmp = "$dep";
+                            $tmp =~ s/\s//g;
+                            push @uniqdeps, $dep if (!defined $_prevdep || $_prevdep ne $tmp);
+                            $_prevdep = $tmp;
+                        }
+                        # Write substvar for the package
+                        write_substvar($pkgname, $varname, join(", ", @uniqdeps), $pkg_substvars);
+                    }
+                } else {
+                    error("invalid '$namespace' substvar syntax: $varparams");
+                }
+            }
+        }
+    }
+}
+
+exit 0
