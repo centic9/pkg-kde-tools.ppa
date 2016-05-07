@@ -297,6 +297,26 @@ sub _expand {
     return ($arch =~ /^(arm|armeb|armel|armhf|sh4)$/) ? 'f' : 'd';
 }
 
+package Debian::PkgKde::SymbolsHelper::Substs::TypeSubst::time_t;
+
+use strict;
+use warnings;
+use base 'Debian::PkgKde::SymbolsHelper::Substs::TypeSubst';
+
+sub new {
+    my $class = shift;
+    my $self = $class->SUPER::new(@_);
+    $self->{substvar} = "{time_t}";
+    $self->{types} = [ qw(x l) ]; # long long / long
+    return $self;
+}
+
+sub _expand {
+    my ($self, $arch) = @_;
+    # see bits/types.h and bits/typesizes.h, long everywhere, except in x32
+    return ($arch =~ /^(x32)$/) ? 'x' : 'l';
+}
+
 package Debian::PkgKde::SymbolsHelper::Substs::TypeSubst;
 
 use strict;

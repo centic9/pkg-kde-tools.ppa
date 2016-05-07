@@ -36,6 +36,7 @@ our @TYPE_SUBSTS = (
     "${NS}::TypeSubst::quintptr"->new(),
     "${NS}::TypeSubst::intptr_t"->new(),
     "${NS}::TypeSubst::qreal"->new(),
+    "${NS}::TypeSubst::time_t"->new(),
 );
 
 our @CPP_TYPE_SUBSTS;

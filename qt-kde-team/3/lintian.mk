@@ -17,11 +17,11 @@
 ifdef dqk_dir
 
 lintian:
-	dpkg-genchanges > ../.pkg-kde-lintian.changes
+	-dpkg-genchanges > ../.pkg-kde-lintian.changes
 	@echo "=== Start lintian"
 	@-lintian ../.pkg-kde-lintian.changes
 	@echo "=== End lintian"
-	rm ../.pkg-kde-lintian.changes
+	rm -f ../.pkg-kde-lintian.changes
 
 .PHONY: lintian
 

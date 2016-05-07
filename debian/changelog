@@ -1,3 +1,25 @@
+pkg-kde-tools (0.15.21~ubuntu1) yakkety; urgency=medium
+
+  * Merge with debian git master (LP: #1536169)
+  * Update VCS fiels for the new repository location 
+
+ -- Philip Muškovac <yofel@kubuntu.org>  Sun, 08 May 2016 01:46:22 +0200
+
+pkg-kde-tools (0.15.21) UNRELEASED; urgency=medium
+
+  [ Dmitry Shachnev ]
+  * pkgkde-mark-qt5-private-symbols:
+    - Make --write-results option the default, add option --print-diff for the
+      old behavior.
+    - Do not try to mark private symbols if alternative dependency is not
+      specified in the symbols file.
+  * Use canonical URL in Vcs-Browser field.
+
+  [ Maximiliano Curia ]
+  * pkgkde-symbolshelper: Add time_t type substitution.
+
+ -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Wed, 06 Jan 2016 20:52:49 +0300
+
 pkg-kde-tools (0.15.20~ubuntu4) xenial; urgency=medium
 
   * Add eo to the locale list 
@@ -41,10 +63,18 @@ pkg-kde-tools (0.15.20~ubuntu1) xenial; urgency=medium
 
  -- Jonathan Riddell <jriddell@ubuntu.com>  Tue, 08 Dec 2015 11:33:48 +0000
 
-pkg-kde-tools (0.15.20) UNRELEASED; urgency=medium
+pkg-kde-tools (0.15.20) unstable; urgency=medium
+
+  * Team upload.
 
   [ Dmitry Shachnev ]
   * Minor fixes to pkgkde-mark-private-symbols.1 manpage.
+  * Add a new script (pkgkde-mark-qt5-private-symbols) which is a replacement
+    for the old script (pkgkde-mark-private-symbols) that works with Qt ≥ 5.6.
+    - Add dependency on python3:any for this script.
+    - Write the manual page for this script.
+  * Drop obsolete debian/source/options file. We do not want to force bzip2
+    compression now that xz is the dpkg default.
 
   [ Maximiliano Curia ]
   * Drop stale copy of Dpkg/Shlibs (2010-02-21), and use the ones from
@@ -53,7 +83,7 @@ pkg-kde-tools (0.15.20) UNRELEASED; urgency=medium
       DATALIBDIR global variable.
     - Adapt pkgkde-gensymbols and pkgkde-symbolshelper accordingly.
 
- -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Sat, 15 Aug 2015 14:29:11 +0300
+ -- Dmitry Shachnev <mitya57@debian.org>  Tue, 29 Dec 2015 18:44:43 +0300
 
 pkg-kde-tools (0.15.19ubuntu1) wily; urgency=low
 
@@ -312,7 +342,7 @@ pkg-kde-tools (0.15.14) unstable; urgency=medium
   [ Helmut Grohne ]
   * Mark binary pkg-kde-tools as M-A:foreign. (Closes: #751338).
 
- -- Lisandro Damián Nicanor Pérez Meyer <lisandro@debian.org>  Sat, 12 Jul 2014 15:45:14 -03
+ -- Lisandro Damián Nicanor Pérez Meyer <lisandro@debian.org>  Sat, 12 Jul 2014 15:45:14 -0300
 
 pkg-kde-tools (0.15.13) unstable; urgency=medium
 

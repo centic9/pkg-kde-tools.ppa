@@ -1,0 +1,80 @@
+#!/usr/bin/python3
+
+# Script to mark private symbols
+# Copyright: 2015 Dmitry Shachnev <mitya57@debian.org>
+
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+'''Mark private symbols based on Qt version tags (symbols that are tagged
+with Qt_5_PRIVATE_API will be marked as private).'''
+
+
+from argparse import ArgumentParser
+from difflib import unified_diff
+from glob import glob
+from sys import stdout, stderr
+
+
+def process_symbols_file(symbols_file_path, write_results=False):
+    old_lines = []
+    new_lines = []
+    has_alternative = False
+    with open(symbols_file_path) as symbols_file:
+        for line in symbols_file:
+            old_lines.append(line)
+            line = line.rstrip()
+            if line.endswith(' 1'):
+                line = line[:-2]
+            if '@Qt_5_PRIVATE_API' in line:
+                line += ' 1'
+            if line.startswith('| '):
+                has_alternative = True
+            new_lines.append(line + '\n')
+    if not has_alternative:
+        print('Skipping file %s, no alternative dependency specified.' %
+              symbols_file_path)
+    elif write_results:
+        with open(symbols_file_path, 'w') as symbols_file:
+            for line in new_lines:
+                symbols_file.write(line)
+    else:
+        for line in unified_diff(old_lines, new_lines,
+                                 fromfile=symbols_file_path,
+                                 tofile=symbols_file_path):
+            stdout.write(line)
+
+
+if __name__ == '__main__':
+    parser = ArgumentParser(description=__doc__)
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--write-results',
+                       help='write results back into symbols files (default)',
+                       action='store_false')
+    group.add_argument('--print-diff',
+                       help='print diffs into stdout instead of applying them',
+                       action='store_true')
+    args = parser.parse_args()
+
+    symbols_files = glob('debian/*.symbols')
+    if not symbols_files:
+        print('No symbols files found!', file=stderr)
+    for symbols_file_path in symbols_files:
+        process_symbols_file(symbols_file_path, not args.print_diff)
