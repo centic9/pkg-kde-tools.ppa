@@ -48,11 +48,6 @@ include $(DEB_PKG_KDE_MAKEFILES)/variables.mk
 # Add support for pkgkde-symbolshelper by default
 include $(DEB_PKG_KDE_MAKEFILES)/cdbs/symbolshelper.mk
 
-# Since cmake 2.6.2 or higher is required from now on, enable
-# relative paths to get more ccache hits.
-# NOTE: might not work with vanilla 2.6.2, only with Debian's one.
-DEB_CMAKE_KDE4_FLAGS += -DCMAKE_USE_RELATIVE_PATHS=ON
-
 # Pass standard KDE 4 flags to cmake via appropriate CDBS variable
 # (DEB_CMAKE_EXTRA_FLAGS)
 DEB_CMAKE_EXTRA_FLAGS += $(DEB_CMAKE_KDE4_FLAGS) $(DEB_CMAKE_CUSTOM_FLAGS)

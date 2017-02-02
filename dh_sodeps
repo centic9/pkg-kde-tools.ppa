@@ -73,7 +73,12 @@ my @packages = getpackages("arch");
 
 foreach my $package (@{$dh{DOPACKAGES}}) {
     my $tmpdir = tmpdir($package);
-    my @solinks = grep { -l $_ } glob("$tmpdir/usr/lib/*.so");
+    my $globstring = "$tmpdir/usr/lib/*.so";
+    my $multiarch = dpkg_architecture_value("DEB_HOST_MULTIARCH");
+    if (defined $multiarch) {
+        $globstring = "$globstring $tmpdir/usr/lib/$multiarch/*.so"
+    }
+    my @solinks = grep { -l $_ } glob($globstring);
 
     if (@solinks) {
         my $arch = package_arch($package);
@@ -93,7 +98,7 @@ foreach my $package (@{$dh{DOPACKAGES}}) {
             my $target = readlink($solink);
             foreach my $p (@packages) {
                 next if $p eq $package;
-                if (-e "debian/$p/usr/lib/$target") {
+                if (-e "debian/$p/usr/lib/$target" || (defined $multiarch and -e "debian/$p/usr/lib/$multiarch/$target")) {
                     addsubstvar($package, "so:Depends", $p, $verinfo);
                 }
             }

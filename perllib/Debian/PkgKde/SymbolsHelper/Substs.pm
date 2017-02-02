@@ -36,6 +36,7 @@ our @TYPE_SUBSTS = (
     "${NS}::TypeSubst::quintptr"->new(),
     "${NS}::TypeSubst::intptr_t"->new(),
     "${NS}::TypeSubst::qreal"->new(),
+    "${NS}::TypeSubst::long_double"->new(),
     "${NS}::TypeSubst::time_t"->new(),
 );
 

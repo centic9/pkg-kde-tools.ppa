@@ -238,7 +238,6 @@ sub apply {
     my $pid = spawn(exec => [ "patch", "--posix", "--force", "-r-", "-p0" ],
                             from_pipe => \$to_patch_process,
                             to_handle => $outfile,
-                            error_to_handle => $outfile,
                             wait_child => 0
     );
     my $ret = $self->output($to_patch_process, $filename);

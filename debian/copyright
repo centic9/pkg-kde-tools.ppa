@@ -35,7 +35,7 @@ License (unless stated otherwise in the following paragraphs):
 On Debian systems, the complete text of the GNU General
 Public License can be found in `/usr/share/common-licenses/GPL-3'.
 
-The follwing license applies to:
+The following license applies to:
 
   - makefiles directory and its contents;
   - qt-kde-team directory and its contents;

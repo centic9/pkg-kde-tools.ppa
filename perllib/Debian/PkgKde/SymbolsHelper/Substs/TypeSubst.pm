@@ -297,6 +297,25 @@ sub _expand {
     return ($arch =~ /^(arm|armeb|armel|armhf|sh4)$/) ? 'f' : 'd';
 }
 
+package Debian::PkgKde::SymbolsHelper::Substs::TypeSubst::long_double;
+
+use strict;
+use warnings;
+use base 'Debian::PkgKde::SymbolsHelper::Substs::TypeSubst';
+
+sub new {
+    my $class = shift;
+    my $self = $class->SUPER::new(@_);
+    $self->{substvar} = "{long_double}";
+    $self->{types} = [ qw(e g) ]; # native long double / __float128
+    return $self;
+}
+
+sub _expand {
+    my ($self, $arch) = @_;
+    return ($arch =~ /^(alpha|powerpc|powerpcspe|ppc64|ppc64el|s390x)$/) ? 'g' : 'e';
+}
+
 package Debian::PkgKde::SymbolsHelper::Substs::TypeSubst::time_t;
 
 use strict;

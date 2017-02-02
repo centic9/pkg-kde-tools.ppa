@@ -1,11 +1,42 @@
-pkg-kde-tools (0.15.21~ubuntu1) yakkety; urgency=medium
+pkg-kde-tools (0.15.24ubuntu1) zesty; urgency=medium
 
-  * Merge with debian git master (LP: #1536169)
-  * Update VCS fiels for the new repository location 
+  * Merge with debian
 
- -- Philip Muškovac <yofel@kubuntu.org>  Sun, 08 May 2016 01:46:22 +0200
+ -- José Manuel Santamaría Lema <panfaust@gmail.com>  Thu, 02 Feb 2017 00:44:08 +0000
 
-pkg-kde-tools (0.15.21) UNRELEASED; urgency=medium
+pkg-kde-tools (0.15.24) unstable; urgency=medium
+
+  * pkgkde-symbolshelper: Do not pass stderr handle to Dpkg::IPC::spawn,
+    to workaround #839905 (patch does not print to stderr anyway).
+  * Add myself to Uploaders.
+
+ -- Dmitry Shachnev <mitya57@debian.org>  Wed, 19 Oct 2016 21:33:01 +0300
+
+pkg-kde-tools (0.15.23) unstable; urgency=medium
+
+  * Add myself to Uploaders.
+  * dh_sodeps: make it work also for libraries in the multiarch directory.
+  * dh_sameversiondep: fix typo in documentation.
+
+ -- Pino Toscano <pino@debian.org>  Sat, 27 Aug 2016 09:53:43 +0200
+
+pkg-kde-tools (0.15.22) unstable; urgency=medium
+
+  * Team upload.
+
+  [ Dmitry Shachnev ]
+  * pkgkde-symbolshelper: Add type substitution for long double.
+
+  [ Pino Toscano ]
+  * Drop -DCMAKE_USE_RELATIVE_PATHS=ON from the CMake flags: it is no more
+    supported in recent versions, and its usage breaks functionalities
+    (e.g. the QFINDTESTDATA system in Qt 5).
+  * Fix typo in copyright.
+  * Bump Standards-Version to 3.9.8, no changes required.
+
+ -- Pino Toscano <pino@debian.org>  Wed, 20 Jul 2016 22:10:41 +0200
+
+pkg-kde-tools (0.15.21) unstable; urgency=medium
 
   [ Dmitry Shachnev ]
   * pkgkde-mark-qt5-private-symbols:
@@ -18,7 +49,7 @@ pkg-kde-tools (0.15.21) UNRELEASED; urgency=medium
   [ Maximiliano Curia ]
   * pkgkde-symbolshelper: Add time_t type substitution.
 
- -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Wed, 06 Jan 2016 20:52:49 +0300
+ -- Maximiliano Curia <maxy@debian.org>  Sun, 08 May 2016 10:38:28 +0200
 
 pkg-kde-tools (0.15.20~ubuntu4) xenial; urgency=medium
 

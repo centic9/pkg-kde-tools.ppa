@@ -107,7 +107,7 @@ The name of the package which you want to add as a dependency.
 
 The name of the package which dependencies are to be intersected with the
 dependencies of the I<dependency> package. Defaults to the first package in
-debian/control if ommited.
+debian/control if omitted.
 
 =item I<dependency type> (optional)
 
