@@ -1,3 +1,9 @@
+pkg-kde-tools (0.15.24ubuntu2~ppa1) xenial; urgency=medium
+
+  * Backport to Xenial.
+
+ -- Dominik Stadler (Ubuntu key) <dominik.stadler@gmx.at>  Fri, 10 Feb 2017 16:39:08 +0100
+
 pkg-kde-tools (0.15.24ubuntu1) zesty; urgency=medium
 
   * Merge with debian
